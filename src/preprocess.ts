@@ -234,14 +234,10 @@ function process_Mapping(node:Mapping): void {
 }
 
 function process_FunctionTypeName(node:FunctionTypeName): void {
-    const newParams:ParameterList = new ParameterList(id++, srcStr, []);
-    const newRets:ParameterList = new ParameterList(id++, srcStr, []);
+    const newParams:ParameterList = clone(node.vParameterTypes) as ParameterList;
+    const newRets:ParameterList = clone(node.vReturnParameterTypes) as ParameterList;
     const newType:FunctionTypeName = new FunctionTypeName(id++, srcStr, node.typeString, node.visibility, node.stateMutability, newParams, newRets);
-    registerNode(node.vParameterTypes, newParams);
-    registerNode(node.vReturnParameterTypes, newRets);
     addNode(node, newType);
-    visitChildren(node.vParameterTypes, newParams);
-    visitChildren(node.vReturnParameterTypes, newRets);
 }
 
 /*
@@ -263,13 +259,10 @@ function process_StructDefinition(node:StructDefinition): void {
 
 function process_VariableDeclaration(node:VariableDeclaration): void {
     const newType:TypeName = clone(node.vType) as TypeName;
-    const newOverride:OverrideSpecifier = new OverrideSpecifier(id++, srcStr, []);
+    const newOverride:OverrideSpecifier = clone(node.vOverrideSpecifier) as OverrideSpecifier;
     const newValue:Expression = clone(node.vValue) as Expression;
     const newVariable:VariableDeclaration = new VariableDeclaration(id++, srcStr, node.constant, node.indexed, node.name, node.scope, node.stateVariable, node.storageLocation, node.visibility, node.mutability, node.typeString, node.documentation, newType, newOverride, newValue, node.nameLocation);
-    registerNode(node.vOverrideSpecifier, newOverride);
     addNode(node, newVariable);
-
-    visitChildren(node.vOverrideSpecifier, newOverride);
 }
 
 function process_UserDefinedValueTypeDefinition(node:UserDefinedValueTypeDefinition): void {
@@ -291,21 +284,15 @@ function process_EnumValue(node:EnumValue): void {
 }
 
 function process_ErrorDefinition(node:ErrorDefinition): void {
-    const newParams:ParameterList = new ParameterList(id++, srcStr, []);
+    const newParams:ParameterList = clone(node.vParameters) as ParameterList;
     const newErr:ErrorDefinition = new ErrorDefinition(id++, srcStr, node.name, newParams, node.documentation, node.nameLocation);
-    registerNode(node.vParameters, newParams);
     addNode(node, newErr);
-
-    visitChildren(node.vParameters, newParams);
 }
 
 function process_EventDefinition(node:EventDefinition): void {
-    const newParams:ParameterList = new ParameterList(id++, srcStr, []);
+    const newParams:ParameterList = clone(node.vParameters) as ParameterList;
     const newEvent:EventDefinition = new EventDefinition(id++, srcStr, node.anonymous, node.name, newParams, node.documentation, node.nameLocation);
-    registerNode(node.vParameters, newParams);
     addNode(node, newEvent);
-
-    visitChildren(node.vParameters, newParams);
 }
 
 function process_StructuredDocumentation(node:StructuredDocumentation): void {
@@ -314,18 +301,11 @@ function process_StructuredDocumentation(node:StructuredDocumentation): void {
 }
 
 function process_ModifierDefinition(node:ModifierDefinition): void {
-    const newParams:ParameterList = new ParameterList(id++, srcStr, []);
-    const newBody:Block = new Block(id++, srcStr, [], node.documentation);
-    const newOverride:OverrideSpecifier = new OverrideSpecifier(id++, srcStr, []);
+    const newParams:ParameterList = clone(node.vParameters) as ParameterList;
+    const newBody:Block = clone(node.vBody) as Block;
+    const newOverride:OverrideSpecifier = clone(node.vOverrideSpecifier) as OverrideSpecifier;
     const newMod:ModifierDefinition = new ModifierDefinition(id++, srcStr, node.name, node.virtual, node.visibility, newParams, newOverride, newBody, node.documentation, node.nameLocation);
-    registerNode(node.vParameters, newParams);
-    registerNode(node.vOverrideSpecifier, newOverride);
-    registerNode(node.vBody, newBody);
     addNode(node, newMod);
-
-    visitChildren(node.vParameters, newParams);
-    visitChildren(node.vOverrideSpecifier, newOverride);
-    visitChildren(node.vBody, newBody);
 }
 
 function process_OverrideSpecifier(node:OverrideSpecifier): void {
@@ -342,25 +322,15 @@ function process_ModifierInvocation(node:ModifierInvocation): void {
 }
 
 function process_FunctionDefinition(node:FunctionDefinition): void {
-    const newParams:ParameterList = new ParameterList(id++, srcStr, []);
-    const newRets:ParameterList = new ParameterList(id++, srcStr, []);
-    const newBody:Block = new Block(id++, srcStr, [], node.documentation);
-    const newOverride:OverrideSpecifier = new OverrideSpecifier(id++, srcStr, []);
+    const newParams:ParameterList = clone(node.vParameters) as ParameterList;
+    const newRets:ParameterList = clone(node.vReturnParameters) as ParameterList;
+    const newBody:Block = clone(node.vBody) as Block;
+    const newOverride:OverrideSpecifier = clone(node.vOverrideSpecifier) as OverrideSpecifier;
     const mods:ModifierInvocation[] = cloneList(node.vModifiers) as ModifierInvocation[];
     const docs:string | StructuredDocumentation = cloneDocs(node.documentation);
-
     const newFn:FunctionDefinition = new FunctionDefinition(id++, srcStr, node.scope, node.kind, node.name, node.virtual, node.visibility, node.stateMutability, node.isConstructor, newParams, newRets, mods, newOverride, newBody, docs, node.nameLocation);
 
-    registerNode(node.vParameters, newParams);
-    registerNode(node.vReturnParameters, newRets);
-    registerNode(node.vBody, newBody);
-    registerNode(node.vOverrideSpecifier, newOverride);
     addNode(node, newFn);
-
-    visitChildren(node.vParameters, newParams);
-    visitChildren(node.vReturnParameters, newRets);
-    visitChildren(node.vBody, newBody);
-    visitChildren(node.vOverrideSpecifier, newOverride);
 }
 
 /*
@@ -484,15 +454,10 @@ function process_RevertStatement(node:RevertStatement): void {
 
 function process_TryCatchClause(node:TryCatchClause): void {
     const docs:string | StructuredDocumentation = cloneDocs(node.documentation);
-    const newParams:ParameterList = new ParameterList(id++, srcStr, []);
-    const newBlk:Block = new Block(id++, srcStr, [], node.documentation);
+    const newParams:ParameterList = clone(node.vParameters) as ParameterList;
+    const newBlk:Block = clone(node.vBlock) as Block;
     const newCatch:TryCatchClause = new TryCatchClause(id++, srcStr, node.errorName, newBlk, newParams, docs);
-    registerNode(node.vParameters, newParams);
-    registerNode(node.vBlock, newBlk);
     addNode(node, newCatch);
-
-    visitChildren(node.vParameters, newParams);
-    visitChildren(node.vBlock, newBlk);
 }
 
 function process_TryStatement(node:TryStatement): void {
