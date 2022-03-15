@@ -3,6 +3,7 @@
         "downlevelIteration": true
     },
     "files": [
-        "preprocess.ts"
+        "preprocess.ts",
+        "dsl.ts"
     ]
 }
