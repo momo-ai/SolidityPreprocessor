@@ -148,10 +148,21 @@ function cloneDocs(docs: string | StructuredDocumentation): string | StructuredD
 }
 
 function getNewId(node:ASTNode, id:number):number {
+    if(id < 0 || id == undefined) {
+        return id;
+    }
+
     if(!refRedirect.has(id)) {
-        console.log("Could not find declaration " + id);
-        console.log(node);
-        process.exit(1);
+        const oldParent:ASTNodeWithChildren<ASTNode> = parent;
+        parent = modified;
+        const refNode:ASTNode = node.context.locate(id);
+        if(refNode == undefined) {
+            console.log("Could not find referenced node: " + id);
+            console.log(node);
+            process.exit(1);
+        } 
+        unitDispatch(refNode);
+        parent = oldParent;
     }
     return refRedirect.get(id);
 }
@@ -177,8 +188,7 @@ function process_ContractDefinition(node:ContractDefinition): void {
 }
 
 function process_ImportDirective(node:ImportDirective): void {
-    const newImport:ImportDirective = new ImportDirective(id++, srcStr, node.file, node.absolutePath, node.unitAlias, node.symbolAliases, node.scope, node.sourceUnit);
-    addNode(node, newImport);
+    //skip
 }
 
 function process_InheritanceSpecifier(node:InheritanceSpecifier): void {
@@ -601,6 +611,10 @@ function process_FunctionCallOptions(node:FunctionCallOptions): void {
 }
 
 function unitDispatch(node:ASTNode): void {
+    if(refRedirect.has(node.id)) {
+        return;
+    }
+
     if(node instanceof PragmaDirective) {
         process_PragmaDirective(node);
     }
@@ -839,6 +853,5 @@ async function test(filename: string) {
     //console.log(result);
 }
 
-console.log(process.argv);
 test(process.argv[2]);
 
