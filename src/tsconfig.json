@@ -4,6 +4,7 @@
     },
     "files": [
         "preprocess.ts",
-        "dsl.ts"
+        "dsl.ts",
+        "traverse.ts"
     ]
 }
