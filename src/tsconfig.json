@@ -4,7 +4,9 @@
     },
     "files": [
         "preprocess.ts",
-        "dsl.ts",
-        "traverse.ts"
+        "copy.ts",
+        "traverse.ts",
+        "dslGen.ts",
+        "summarize.ts"
     ]
 }

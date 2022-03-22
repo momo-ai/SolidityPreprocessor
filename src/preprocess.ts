@@ -70,10 +70,12 @@ import {
     Mapping,
     ImportDirective,
     InheritanceSpecifier,
-    UsingForDirective
+    UsingForDirective,
 } from "solc-typed-ast";
 
-import {AstCopy}  from "./dsl";
+import {AstCopy}  from "./copy";
+import {DSLGen} from "./dslGen";
+import {Summarizer} from "./summarize";
 
 
 async function readAST(
@@ -94,17 +96,20 @@ function writeAST(units: SourceUnit[], version: string): [string, Map<ASTNode, [
         console.log(writer.write(unit));
     }
 
+
     return [units.map((unit) => writer.write(unit, sourceMap)).join("\n"), sourceMap];
 }
 
 async function test(filename: string) {
     const ast : SourceUnit[] = await readAST(filename);
-    const cpy:AstCopy = new AstCopy();
+    const summarizer:Summarizer = new Summarizer();
+    summarizer.preprocess(ast);
+    /*const cpy:DSLGen = new DSLGen();
     const modified:SourceUnit = cpy.preprocess(ast);
     if(modified != undefined) {
         var arr:SourceUnit[] = [modified];
         writeAST(arr, "0.8.0");
-    }
+    }*/
     //const result: CompileResult = await compile(filename);
     //const reader = new ASTReader();
     //const sourceUnits = reader.read(result.data);

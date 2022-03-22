@@ -78,7 +78,7 @@ import {
 } from "./traverse";
 
 
-export class AstCopy extends AstTraverse {
+export class AstCopy extends AstTraverse<void> {
 
     srcStr:string;
     id:number;
@@ -103,16 +103,16 @@ export class AstCopy extends AstTraverse {
  * Utility Functions
  */
     visitChildren(copyFrom:ASTNodeWithChildren<ASTNode>, copied:ASTNodeWithChildren<ASTNode>): void {
-        if(copyFrom == undefined) {
+        /*if(copyFrom == undefined) {
             return;
-        }
+        }*/
 
         const oldParent:ASTNodeWithChildren<ASTNode> = this.parent;
         this.parent = copied;
-        //node.walkChildren(unitDispatch);
-        for(const unit of copyFrom.children) {
+        this.walkChildren(copyFrom);
+        /*for(const unit of copyFrom.children) {
             this.unitDispatch(unit);
-        }
+        }*/
         this.parent = oldParent;
     }
 
@@ -212,7 +212,7 @@ export class AstCopy extends AstTraverse {
         this.fetchContractDeps(node, newContract);
 
         const oldContract:ContractDefinition = this.curContract;
-        this.curContract = node;
+        this.curContract = newContract;
         this.visitChildren(node, newContract);
         this.curContract = oldContract;
     }
@@ -355,6 +355,7 @@ export class AstCopy extends AstTraverse {
     process_FunctionDefinition(node:FunctionDefinition): void {
         const newParams:ParameterList = this.clone(node.vParameters) as ParameterList;
         const newRets:ParameterList = this.clone(node.vReturnParameters) as ParameterList;
+        console.log(newRets);
         const newBody:Block = this.clone(node.vBody) as Block;
         const newOverride:OverrideSpecifier = this.clone(node.vOverrideSpecifier) as OverrideSpecifier;
         const mods:ModifierInvocation[] = this.cloneList(node.vModifiers) as ModifierInvocation[];
@@ -499,10 +500,9 @@ export class AstCopy extends AstTraverse {
         this.addNode(node, newTry);
     }
 
-/*
- * Expressions
- */
-
+    /*
+     * Expressions
+     */
     process_Assignment(node:Assignment): void {
         const newLhs:Expression = this.clone(node.vLeftHandSide) as Expression;
         const newRhs:Expression = this.clone(node.vRightHandSide) as Expression;
