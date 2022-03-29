@@ -106,6 +106,7 @@ class Event extends SummaryNode {
 }
 
 class Func extends SummaryNode {
+    isConstructor:boolean;
     name:string;
     params:Variable[] = [];
     returns:Variable[] = [];
@@ -132,6 +133,7 @@ class UserType extends Type {
 
 class ArrayType extends Type {
     subType:string = "ArrayType";
+    name:string;
     base:Type;
 }
 
@@ -142,6 +144,7 @@ class ElementaryType extends Type {
 
 class MapType extends Type {
     subType:string = "MapType";
+    name:string;
     key:Type;
     value:Type;
 }
@@ -258,12 +261,14 @@ export class Summarizer extends AstTraverse<SummaryNode> {
 
     process_ArrayTypeName(node:ArrayTypeName): SummaryNode {
         let arr:ArrayType = new ArrayType();
+        arr.name = node.typeString;
         arr.base = this.unitDispatch(node.vBaseType) as Type;
         return arr;
     }
 
     process_Mapping(node:Mapping): SummaryNode {
         let map:MapType = new MapType();
+        map.name = node.typeString;
         map.key = this.unitDispatch(node.vKeyType) as Type;
         map.value = this.unitDispatch(node.vValueType) as Type;
         return map;
@@ -306,7 +311,7 @@ export class Summarizer extends AstTraverse<SummaryNode> {
 
         let i = 0;
         for(const val of node.vMembers) {
-            def.values[i] = val.name;
+            def.values[val.name] = i;
             //def.values.set(i, val.name);
             i++;
         }
@@ -341,7 +346,13 @@ export class Summarizer extends AstTraverse<SummaryNode> {
 
     process_FunctionDefinition(node:FunctionDefinition): SummaryNode {
         let func:Func = new Func();
-        func.name = node.name;
+        func.isConstructor = node.isConstructor;
+        if(node.isConstructor) {
+            func.name = "constructor";
+        }
+        else {
+            func.name = node.name;
+        }
         const params:VariableList = this.unitDispatch(node.vParameters) as VariableList;
         func.params = params.vars;
         const rets:VariableList = this.unitDispatch(node.vReturnParameters) as VariableList;
