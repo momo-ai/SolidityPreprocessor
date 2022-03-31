@@ -5,11 +5,12 @@
 Requires:
  * Typescript
  * Node.js
- * [solc-typed-ast](https://github.com/ConsenSys/solc-typed-ast)
+ * [solc-typed-ast](https://github.com/ConsenSys/solc-typed-ast) (install with command: `npm install --save solc-typed-ast` not `npm install -g solc-typed-ast`)
+ 
 
 ## Build
 
-    tsc
+Run `tsc` from directory containing `preprocess.ts` (currently, in `src/` directory).
 
 ## Usage
 
