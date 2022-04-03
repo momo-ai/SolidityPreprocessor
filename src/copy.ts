@@ -278,7 +278,8 @@ export class AstCopy extends AstTraverse<void> {
     process_UsingForDirective(node:UsingForDirective): void {
         const newLib:UserDefinedTypeName | IdentifierPath = this.clone(node.vLibraryName) as UserDefinedTypeName | IdentifierPath;
         const newType:TypeName = this.clone(node.vTypeName) as TypeName;
-        const newUsing:UsingForDirective = new UsingForDirective(this.id++, this.srcStr, newLib, newType);
+        const newFnList:IdentifierPath[] = this.cloneList(node.vFunctionList) as IdentifierPath[];
+        const newUsing:UsingForDirective = new UsingForDirective(this.id++, this.srcStr, node.isGlobal, newLib, newFnList, newType);
         this.addNode(node, newUsing);
     }
 

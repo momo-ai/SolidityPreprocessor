@@ -108,6 +108,8 @@ class Event extends SummaryNode {
 class Func extends SummaryNode {
     isConstructor:boolean;
     name:string;
+    visibility:string;
+    mutability:string;
     params:Variable[] = [];
     returns:Variable[] = [];
     modifiers:string[] = [];
@@ -329,7 +331,7 @@ export class Summarizer extends AstTraverse<SummaryNode> {
 
     process_ModifierInvocation(node:ModifierInvocation): SummaryNode {
         let str:StrNode = undefined;
-        const sum:SummaryNode = this.unitDispatch(node);
+        const sum:SummaryNode = this.unitDispatch(node.vModifierName);
         if(sum instanceof UserType) {
             str = new StrNode();
             str.str = (sum as UserType).name;
@@ -347,6 +349,8 @@ export class Summarizer extends AstTraverse<SummaryNode> {
     process_FunctionDefinition(node:FunctionDefinition): SummaryNode {
         let func:Func = new Func();
         func.isConstructor = node.isConstructor;
+	func.visibility = node.visibility;
+	func.mutability = node.stateMutability;
         if(node.isConstructor) {
             func.name = "constructor";
         }
