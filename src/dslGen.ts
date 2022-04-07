@@ -77,7 +77,7 @@ import {
     FunctionVisibility,
     DataLocation,
     StateVariableVisibility,
-    Mutability
+    Mutability,
 } from "solc-typed-ast";
 
 import {
@@ -97,100 +97,8 @@ class NameGenerator {
     sanitize(str:string):string {
         return str;
     }
-
-    gen_BinaryOperation(node:BinaryOperation): string {
-        let fnName:string = "";
-        switch(node.operator) {
-            case "+":
-                fnName += "v_add";
-                break;
-            case "-":
-                fnName += "v_sub";
-                break;
-            case "*":
-                fnName += "v_mul";
-                break;
-            case "/":
-                fnName += "v_div";
-                break;
-            case "%":
-                fnName += "v_mod";
-                break;
-            case "==":
-                fnName += "v_eq";
-                break;
-            case "!=":
-                fnName += "v_neq";
-                break;
-            case "<":
-                fnName += "v_lt";
-                break;
-            case "<=":
-                fnName += "v_leq";
-                break;
-            case ">":
-                fnName += "v_gt";
-                break;
-            case ">=":
-                fnName += "v_geq";
-                break;
-            case "&&":
-                fnName += "v_land";
-                break;
-            case "||":
-                fnName += "v_lor";
-                break;
-            case "&":
-                fnName += "v_band";
-                break;
-            case "|":
-                fnName += "v_bor";
-                break;
-            case "^":
-                fnName += "v_xor";
-                break;
-            case "<<":
-                fnName += "v_shl";
-                break;
-            case ">>":
-                fnName += "v_shr";
-                break;
-            default:
-                console.log("Could not find the operator " + node.operator);
-                process.exit(1);
-        }
-
-        const lhsType:string = this.sanitize(node.vLeftExpression.typeString);
-        const rhsType:string = this.sanitize(node.vRightExpression.typeString);
-        fnName += "_" + lhsType + "_" + rhsType;
-        return fnName;
-    }
-
-    gen_UnaryOperation(node:UnaryOperation): string {
-        let fnName:string = "";
-        switch(node.operator) {
-            case "-":
-                fnName += "v_neg";
-                break;
-            case "++":
-                fnName += "v_inc";
-                break;
-            case "--":
-                fnName += "v_dec";
-                break;
-            case "!":
-                fnName += "v_lnot";
-                break;
-            case "~":
-                fnName += "v_bnot";
-                break;
-        }
-
-        const subType:string = this.sanitize(node.vSubExpression.typeString);
-        fnName += "_" + subType;
-        return fnName;
-    }
 }
+
 
 export class DSLGen extends AstCopy {
     dsl:Map<string, ASTNode>;
@@ -206,7 +114,209 @@ export class DSLGen extends AstCopy {
         this.typeConvert = new TypeConvert();
     }
 
-    convertElementaryType(str:string):ElementaryTypeName | undefined{
+    extractExternalFunction(node:ASTNode):FunctionDefinition {
+        if(node instanceof MemberAccess) {
+            return node.context.locate(node.referencedDeclaration) as FunctionDefinition;
+        }
+
+        return undefined;
+    }
+
+    getterName(varname:string): string {
+        return "v__get_" + varname;
+    }
+
+    setterName(varname:string): string {
+        return "v__set_" + varname;
+    }
+
+    register(...nodes:ASTNode[]):void {
+        for(const node of nodes) {
+            this.context.register(node);
+        }
+    }
+
+    /*declParams_ElementaryTypeName(t:ElementaryTypeName):VariableDeclaration[] {
+        const varName:string = "p" + string(t.id);
+        return new VariableDeclaration(this.id++, this.srcStr, false, false, varName, node.scope, false, DataLocation.Default, StateVariableVisibility.Default, Mutability.Immutable, t.typeString, undefined, t, undefined, undefined, undefined, undefined);
+    }
+
+    declParams_UserDefinedTypeName(t:UserDefinedTypeName): VariableDeclaration[] {
+        const varName:string = "p" + string(t.id);
+        return new VariableDeclaration(this.id++, this.srcStr, false, false, varName, node.scope, false, DataLocation.Default, StateVariableVisibility.Default, Mutability.Immutable, t.typeString, undefined, t, undefined, undefined, undefined, undefined);
+    }*/
+
+    getVarName(t:TypeName, pre:string):string {
+        return pre + t.id;
+    }
+
+    getExpr_ArrayTypeName(t:ArrayTypeName, params:VariableDeclaration[], nextParam:number, expr:Expression): Expression {
+        const base:Expression = this.getExpr_TypeName(t.vBaseType, params, nextParam + 1, expr);
+        const key:Identifier = new Identifier(this.id++, this.srcStr, "uint256", params[nextParam].name, params[nextParam].id, undefined)
+        const access:IndexAccess = new IndexAccess(this.id++, this.srcStr, t.typeString, base, key, undefined);
+        this.register(key, access);
+        return access;
+    }
+
+    getExpr_Mapping(t:Mapping, params:VariableDeclaration[], nextParam:number, expr:Expression): Expression {
+        const val:Expression = this.getExpr_TypeName(t.vValueType, params, nextParam + 1, expr);
+        const key:Identifier = new Identifier(this.id++, this.srcStr, t.vKeyType.typeString, params[nextParam].name, params[nextParam].id, undefined)
+        const access:IndexAccess = new IndexAccess(this.id++, this.srcStr, t.typeString, val, key, undefined);
+        this.register(key, access);
+        return access;
+    }
+
+    getExpr_TypeName(t:TypeName, params:VariableDeclaration[], nextParam:number, expr:Expression): Expression {
+        if(t instanceof Mapping) {
+            return this.getExpr_Mapping(t, params, nextParam, expr);
+        }
+        if(t instanceof ArrayTypeName) {
+            return this.getExpr_ArrayTypeName(t, params, nextParam, expr);
+        }
+
+        return expr;
+    }
+
+    getExpr(v:VariableDeclaration, params:VariableDeclaration[]): Expression {
+        const ident:Identifier = new Identifier(this.id++, this.srcStr, v.typeString, v.name, v.id, undefined);
+        this.register(ident);
+        return this.getExpr_TypeName(v.vType, params.reverse(), 0, ident);
+    }
+
+
+    declParams_Mapping(t:Mapping):VariableDeclaration[] {
+        const keyVar:VariableDeclaration =  new VariableDeclaration(this.id++, this.srcStr, false, false, this.getVarName(t.vKeyType, "p"), this.curContract.id, false, DataLocation.Default, StateVariableVisibility.Internal, Mutability.Mutable, t.vKeyType.typeString, undefined, t.vKeyType, undefined, undefined, undefined, undefined);
+        this.register(keyVar);
+
+        return [keyVar].concat(this.declParams_TypeName(t.vValueType));
+    }
+
+    declParams_ArrayTypeName(t:ArrayTypeName):VariableDeclaration[] {
+        const indType:ElementaryTypeName = new ElementaryTypeName(this.id++, this.srcStr, "uint256", "uint256", "nonpayable", undefined);
+        const indVar:VariableDeclaration =  new VariableDeclaration(this.id++, this.srcStr, false, false, this.getVarName(t, "p"), this.curContract.id, false, DataLocation.Default, StateVariableVisibility.Internal, Mutability.Mutable, indType.typeString, undefined, indType, undefined, undefined, undefined, undefined);
+        this.register(indType, indVar);
+
+        return [indVar].concat(this.declParams_TypeName(t.vBaseType));
+    }
+
+    declParams_TypeName(t:TypeName):VariableDeclaration[] {
+        if(t instanceof Mapping) {
+            return this.declParams_Mapping(t);
+        }
+        if(t instanceof ArrayTypeName) {
+            return this.declParams_ArrayTypeName(t);
+        }
+
+        return []
+    }
+
+
+    baseType_ArrayTypeName(t:ArrayTypeName): TypeName {
+        return this.baseType_TypeName(t.vBaseType);
+    }
+
+    baseType_Mapping(t:Mapping):TypeName {
+        return this.baseType_TypeName(t.vValueType);
+    }
+
+    baseType_TypeName(t:TypeName):TypeName {
+        if(t instanceof ArrayTypeName) {
+            return this.baseType_ArrayTypeName(t);
+        }
+        if(t instanceof Mapping) {
+            return this.baseType_Mapping(t);
+        }
+
+        return t;
+    }
+
+    getBaseTypeDecl(t:TypeName, name:string):VariableDeclaration {
+        const baseType:TypeName = this.baseType_TypeName(t);
+        const retVar:VariableDeclaration =  new VariableDeclaration(this.id++, this.srcStr, false, false, name, this.curContract.id, false, DataLocation.Default, StateVariableVisibility.Internal, Mutability.Mutable, baseType.typeString, undefined, baseType, undefined, undefined, undefined, undefined);
+        this.register(retVar);
+        return retVar;
+    }
+
+    createGetter(node:VariableDeclaration): FunctionDefinition {
+        const name:string = this.getterName(node.name);
+        const paramList:VariableDeclaration[] = this.declParams_TypeName(node.vType);
+        const params = new ParameterList(this.id++, this.srcStr, paramList);
+        const retDecl:VariableDeclaration = this.getBaseTypeDecl(node.vType, this.getVarName(node.vType, "ret"));
+        const rets:ParameterList = new ParameterList(this.id++, this.srcStr, [retDecl]);
+        //const varRef:Identifier = new Identifier(this.id++, this.srcStr, node.typeString, node.name, node.id, undefined);
+        const expr:Expression = this.getExpr(node, paramList);
+        const retStmt:Return = new Return(this.id++, this.srcStr, rets.id, expr, undefined, undefined);
+        const body:Block = new Block(this.id++, this.srcStr, [retStmt], undefined);
+        const getter:FunctionDefinition = new FunctionDefinition(this.id++, this.srcStr, node.scope, FunctionKind.Function, name, false, FunctionVisibility.Public, FunctionStateMutability.View, false, params, rets, [], undefined, body, undefined, undefined, undefined);
+        this.register(params, rets, retStmt, body, getter);
+        return getter;
+    }
+
+    getSet(node:VariableDeclaration, accessList:VariableDeclaration[], setVal:VariableDeclaration, rets:ParameterList): Return {
+        const lhs:Expression = this.getExpr(node, accessList);
+        const rhs:Expression = new Identifier(this.id++, this.srcStr, setVal.typeString, setVal.name, setVal.id, undefined);
+        const assign:Assignment = new Assignment(this.id++, this.srcStr, setVal.typeString, "=", lhs, rhs, undefined);
+        const ret:Return = new Return(this.id++, this.srcStr, rets.id, assign, undefined, undefined);
+        this.register(rhs, assign, ret);
+        return ret;
+    }
+
+    createSetter(node:VariableDeclaration): FunctionDefinition {
+        const name:string = this.setterName(node.name);
+        const accessList:VariableDeclaration[] = this.declParams_TypeName(node.vType);
+        const setDecl:VariableDeclaration = this.getBaseTypeDecl(node.vType, this.getVarName(node.vType, "set"));
+        const retDecl:VariableDeclaration = this.getBaseTypeDecl(node.vType, this.getVarName(node.vType, "ret"));
+        const paramList:VariableDeclaration[] = accessList.concat([setDecl])
+        const params:ParameterList = new ParameterList(this.id++, this.srcStr, paramList);
+        const rets:ParameterList = new ParameterList(this.id++, this.srcStr, [retDecl]);
+        const retStmt:Return = this.getSet(node, accessList, setDecl, rets);
+        const body:Block = new Block(this.id++, this.srcStr, [retStmt], undefined);
+        const setter:FunctionDefinition = new FunctionDefinition(this.id++, this.srcStr, node.scope, FunctionKind.Function, name, false, FunctionVisibility.Public, FunctionStateMutability.NonPayable, false, params, rets, [], undefined, body, undefined, undefined, undefined);
+        this.register(params, rets, body, setter);
+        return setter;
+    }
+
+    process_VariableDeclaration(node:VariableDeclaration): void {
+        super.process_VariableDeclaration(node);
+        const id:number = this.getNewId(node, node.id);
+        const decl:VariableDeclaration = this.context.locate(id) as VariableDeclaration;
+        if(node.stateVariable) {
+            console.log("starting");
+            const getter:FunctionDefinition = this.createGetter(decl);
+            this.parent.appendChild(getter);
+            const setter:FunctionDefinition = this.createSetter(decl);
+            this.parent.appendChild(setter);
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /*convertElementaryType(str:string):ElementaryTypeName | undefined{
         let payable:boolean = str.includes("payable");
 
         if(str.startsWith("uint") || str.startsWith("int") || str.startsWith("bool") || str.startsWith("address")) {
@@ -320,6 +430,36 @@ export class DSLGen extends AstCopy {
         this.dslDefs.set(newDef.id, preDefs);
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     process_BinaryOperation(node:BinaryOperation) {
         const fnName:string = this.nameGen.gen_BinaryOperation(node);
         const lhsType:string = node.vLeftExpression.typeString;
@@ -331,7 +471,7 @@ export class DSLGen extends AstCopy {
         this.register(body);
         this.createDSLFn(fnName, FunctionStateMutability.Pure, [ident1, ident2], body);
         super.process_BinaryOperation(node);
-    }
+    }*/
 }
 
 
