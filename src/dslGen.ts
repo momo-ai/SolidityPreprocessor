@@ -78,6 +78,7 @@ import {
     DataLocation,
     StateVariableVisibility,
     Mutability,
+    FunctionCallKind
 } from "solc-typed-ast";
 
 import {
@@ -103,12 +104,20 @@ class NameGenerator {
 export class DSLGen extends AstCopy {
     dsl:Map<string, ASTNode>;
     dslDefs:Map<number, Set<string>>;
+    getters:Map<number, FunctionDefinition>;
+    setters:Map<number, FunctionDefinition>;
+    setterToGetter:Map<number, number>;
     nameGen:NameGenerator;
     typeConvert:TypeConvert;
+    isSet:boolean;
 
     constructor() {
         super();
         this.dsl = new Map<string, ASTNode>();
+        this.getters = new Map<number, FunctionDefinition>();
+        this.setters = new Map<number, FunctionDefinition>();
+        this.setterToGetter = new Map<number, number>();
+        this.isSet = false;
         this.dslDefs = new Map<number, Set<string>>();
         this.nameGen = new NameGenerator();
         this.typeConvert = new TypeConvert();
@@ -283,14 +292,78 @@ export class DSLGen extends AstCopy {
         if(node.stateVariable) {
             console.log("starting");
             const getter:FunctionDefinition = this.createGetter(decl);
+            this.getters.set(decl.id, getter);
             this.parent.appendChild(getter);
             const setter:FunctionDefinition = this.createSetter(decl);
+            this.setters.set(decl.id, setter);
+            this.setterToGetter.set(setter.id, getter.id);
             this.parent.appendChild(setter);
         }
     }
 
 
+    process_Identifier(node:Identifier): void {
+        const refId:number = this.getNewId(node, node.referencedDeclaration);
+        const ref = this.context.locate(refId);
+        if(ref instanceof VariableDeclaration && ref.stateVariable) {
+            console.log(ref)
+            if(this.isSet) {
+                const ident:Identifier = new Identifier(this.id++, this.srcStr, node.typeString, this.setters.get(refId).name, this.setters.get(refId).id);
+                const call:FunctionCall = new FunctionCall(this.id++, this.srcStr, node.typeString, FunctionCallKind.FunctionCall, ident, []);
+                this.isSet = false;
+                this.register(ident);
+                super.addNode(node, call);
+                return;
+            }
 
+            const ident:Identifier = new Identifier(this.id++, this.srcStr, node.typeString, this.getters.get(refId).name, this.getters.get(refId).id);
+            const call:FunctionCall = new FunctionCall(this.id++, this.srcStr, node.typeString, FunctionCallKind.FunctionCall, ident, []);
+            this.register(ident);
+            super.addNode(node, call);
+            return;
+        }
+
+        super.process_Identifier(node);
+    }
+
+
+    process_IndexAccess(node:IndexAccess): void {
+        const baseExpr:Expression = this.clone(node.vBaseExpression) as Expression;
+        const indexExpr:Expression = this.clone(node.vIndexExpression) as Expression;
+
+        if(baseExpr instanceof FunctionCall) {
+            baseExpr.vArguments.push(indexExpr);
+            this.parent.appendChild(baseExpr);
+            return;
+        }
+
+        const access:IndexAccess = new IndexAccess(this.id++, this.srcStr, node.typeString, baseExpr, indexExpr);
+        this.addNode(node, access);
+    }
+
+    process_Assignment(node:Assignment): void {
+        this.isSet = true;
+        const lhs:Expression = this.clone(node.vLeftHandSide) as Expression;
+        var rhs:Expression = this.clone(node.vRightHandSide) as Expression;
+
+        if(lhs instanceof FunctionCall) {
+            if(node.operator != "=") {
+                const setIdent:Identifier = lhs.vExpression as Identifier;
+                const getter:FunctionDefinition = this.context.locate(this.setterToGetter.get(setIdent.referencedDeclaration)) as FunctionDefinition;
+                const ident:Identifier = new Identifier(this.id++, this.srcStr, lhs.typeString, getter.name, getter.id);
+                const getCall:FunctionCall = new FunctionCall(this.id++, this.srcStr, lhs.typeString, FunctionCallKind.FunctionCall, ident, [... lhs.vArguments])
+                const binOp:BinaryOperation = new BinaryOperation(this.id++, this.srcStr, rhs.typeString, node.operator.substring(0, node.operator.length - 1), getCall, rhs);
+                this.register(ident, getCall, binOp);
+                rhs = binOp;
+            }
+            lhs.vArguments.push(rhs);
+            this.parent.appendChild(lhs);
+            return;
+        }
+
+        const newAssign:Assignment = new Assignment(this.id++, this.srcStr, node.typeString, node.operator, lhs, rhs);
+        this.addNode(node, newAssign);
+    }
 
 
 
