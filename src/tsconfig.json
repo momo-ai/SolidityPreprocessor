@@ -3,7 +3,8 @@
         "downlevelIteration": true
     },
     "files": [
-        "preprocess.ts",
+        "preprocessor.ts",
+        "summarizer.ts",
         "copy.ts",
         "traverse.ts",
         "dslGen.ts",
