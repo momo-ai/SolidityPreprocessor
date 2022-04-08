@@ -85,31 +85,18 @@ import {
     AstCopy
 } from "./copy"
 
-class TypeConvert {
-    constructor() {
-    }
-
-}
-
-class NameGenerator {
-    constructor() {
-    }
-
-    sanitize(str:string):string {
-        return str;
-    }
-}
+import {
+    AstTraverse
+} from "./traverse";
 
 
 export class DSLGen extends AstCopy {
     dsl:Map<string, ASTNode>;
-    dslDefs:Map<number, Set<string>>;
     getters:Map<number, FunctionDefinition>;
     setters:Map<number, FunctionDefinition>;
     setterToGetter:Map<number, number>;
-    nameGen:NameGenerator;
-    typeConvert:TypeConvert;
     isSet:boolean;
+    contractToProxies:Map<ContractDefinition, Map<string, FunctionDefinition>>;
 
     constructor() {
         super();
@@ -118,18 +105,9 @@ export class DSLGen extends AstCopy {
         this.setters = new Map<number, FunctionDefinition>();
         this.setterToGetter = new Map<number, number>();
         this.isSet = false;
-        this.dslDefs = new Map<number, Set<string>>();
-        this.nameGen = new NameGenerator();
-        this.typeConvert = new TypeConvert();
+        this.contractToProxies = new Map<ContractDefinition, Map<string, FunctionDefinition>>();
     }
 
-    extractExternalFunction(node:ASTNode):FunctionDefinition {
-        if(node instanceof MemberAccess) {
-            return node.context.locate(node.referencedDeclaration) as FunctionDefinition;
-        }
-
-        return undefined;
-    }
 
     getterName(varname:string): string {
         return "v__get_" + varname;
@@ -144,6 +122,19 @@ export class DSLGen extends AstCopy {
             this.context.register(node);
         }
     }
+
+
+    fetchContractDeps(oldDef:ContractDefinition, newDef:ContractDefinition) {
+        super.fetchContractDeps(oldDef, newDef);
+        this.contractToProxies.set(newDef, new Map<string, FunctionDefinition>());
+        for(const id of newDef.linearizedBaseContracts) {
+            const def:ContractDefinition = this.context.locate(id) as ContractDefinition;
+            for(const proxy of this.contractToProxies.get(def)) {
+                this.contractToProxies.get(this.curContract).set(proxy[0], proxy[1]);
+            }
+        }
+    } 
+
 
     /*declParams_ElementaryTypeName(t:ElementaryTypeName):VariableDeclaration[] {
         const varName:string = "p" + string(t.id);
@@ -256,7 +247,7 @@ export class DSLGen extends AstCopy {
         const expr:Expression = this.getExpr(node, paramList);
         const retStmt:Return = new Return(this.id++, this.srcStr, rets.id, expr, undefined, undefined);
         const body:Block = new Block(this.id++, this.srcStr, [retStmt], undefined);
-        const getter:FunctionDefinition = new FunctionDefinition(this.id++, this.srcStr, node.scope, FunctionKind.Function, name, false, FunctionVisibility.Public, FunctionStateMutability.View, false, params, rets, [], undefined, body, undefined, undefined, undefined);
+        const getter:FunctionDefinition = new FunctionDefinition(this.id++, this.srcStr, node.scope, FunctionKind.Function, name, false, FunctionVisibility.Internal, FunctionStateMutability.View, false, params, rets, [], undefined, body, undefined, undefined, undefined);
         this.register(params, rets, retStmt, body, getter);
         return getter;
     }
@@ -280,7 +271,7 @@ export class DSLGen extends AstCopy {
         const rets:ParameterList = new ParameterList(this.id++, this.srcStr, [retDecl]);
         const retStmt:Return = this.getSet(node, accessList, setDecl, rets);
         const body:Block = new Block(this.id++, this.srcStr, [retStmt], undefined);
-        const setter:FunctionDefinition = new FunctionDefinition(this.id++, this.srcStr, node.scope, FunctionKind.Function, name, false, FunctionVisibility.Public, FunctionStateMutability.NonPayable, false, params, rets, [], undefined, body, undefined, undefined, undefined);
+        const setter:FunctionDefinition = new FunctionDefinition(this.id++, this.srcStr, node.scope, FunctionKind.Function, name, false, FunctionVisibility.Internal, FunctionStateMutability.NonPayable, false, params, rets, [], undefined, body, undefined, undefined, undefined);
         this.register(params, rets, body, setter);
         return setter;
     }
@@ -289,8 +280,8 @@ export class DSLGen extends AstCopy {
         super.process_VariableDeclaration(node);
         const id:number = this.getNewId(node, node.id);
         const decl:VariableDeclaration = this.context.locate(id) as VariableDeclaration;
-        if(node.stateVariable) {
-            console.log("starting");
+        if(node.stateVariable && !node.constant) {
+            decl.mutability = Mutability.Mutable;
             const getter:FunctionDefinition = this.createGetter(decl);
             this.getters.set(decl.id, getter);
             this.parent.appendChild(getter);
@@ -305,8 +296,7 @@ export class DSLGen extends AstCopy {
     process_Identifier(node:Identifier): void {
         const refId:number = this.getNewId(node, node.referencedDeclaration);
         const ref = this.context.locate(refId);
-        if(ref instanceof VariableDeclaration && ref.stateVariable) {
-            console.log(ref)
+        if(ref instanceof VariableDeclaration && ref.stateVariable && !ref.constant) {
             if(this.isSet) {
                 const ident:Identifier = new Identifier(this.id++, this.srcStr, node.typeString, this.setters.get(refId).name, this.setters.get(refId).id);
                 const call:FunctionCall = new FunctionCall(this.id++, this.srcStr, node.typeString, FunctionCallKind.FunctionCall, ident, []);
@@ -367,258 +357,90 @@ export class DSLGen extends AstCopy {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    /*convertElementaryType(str:string):ElementaryTypeName | undefined{
-        let payable:boolean = str.includes("payable");
-
-        if(str.startsWith("uint") || str.startsWith("int") || str.startsWith("bool") || str.startsWith("address")) {
-            if(payable) {
-                return new ElementaryTypeName(this.id++, this.srcStr, str, str, "payable");
-            }
-            else {
-                return new ElementaryTypeName(this.id++, this.srcStr, str, str, "nonpayable");
-            }
+    extractStaticExternalFunction(node:ASTNode):FunctionDefinition {
+        if(node instanceof MemberAccess) {
+            return node.context.locate(node.referencedDeclaration) as FunctionDefinition;
         }
 
         return undefined;
     }
 
-    convertMappingType(str:string):Mapping | undefined{
-        return undefined;
+    getContractName(def:FunctionDefinition):string {
+        return this.info.fnParent.get(def).name;
     }
 
-    convertUserDefinedType(str:string):UserDefinedTypeName | undefined{
-        return undefined;
+    getProxyName(callIdent:MemberAccess, def:FunctionDefinition, call:FunctionCall):string {
+        return "v__call_" + this.getContractName(def) + "__function_" + def.name;
     }
 
-    convertArrayType(str:string):ArrayTypeName | undefined {
-        return undefined;
-    }
-
-    convert(str:string):TypeName {
-        let result:TypeName | undefined = this.convertElementaryType(str);
-        if(result != undefined) {
-            return result;
+    makeFnProxy(callIdent:MemberAccess, def:FunctionDefinition, call:FunctionCall) {
+        const proxyName:string = this.getProxyName(callIdent, def, call);
+        if(this.contractToProxies.get(this.curContract).has(proxyName)) {
+            return this.contractToProxies.get(this.curContract).get(proxyName);
         }
 
-        result = this.convertMappingType(str);
-        if(result != undefined) {
-            return result;
-        }
+        const tgtContract:string = "_tgt_contract_";
+        const contractType:UserDefinedTypeName = new UserDefinedTypeName(this.id++, this.srcStr, callIdent.vExpression.typeString, this.getContractName(def), this.getNewId(call, this.info.fnParent.get(def).id), undefined, undefined);
+        const contractParam:VariableDeclaration = new VariableDeclaration(this.id++, this.srcStr, false, false, tgtContract, this.curContract.id, false, DataLocation.Default, StateVariableVisibility.Internal, Mutability.Mutable, contractType.typeString, undefined, contractType, undefined, undefined, undefined, undefined);
+        const fnParams:VariableDeclaration[] = super.cloneList(def.vParameters.vParameters) as VariableDeclaration[];
+        const paramList:VariableDeclaration[] = [contractParam].concat(fnParams);
+        const params:ParameterList = new ParameterList(this.id++, this.srcStr, paramList);
+        const retList:VariableDeclaration[] = super.cloneList(def.vReturnParameters.vParameters) as VariableDeclaration[];
+        const rets:ParameterList = new ParameterList(this.id++, this.srcStr, retList);
 
-        result = this.convertUserDefinedType(str);
-        if(result != undefined) {
-            return result;
+        var args:Expression[] = []
+        for(const param of fnParams) {
+            const ident:Identifier = new Identifier(this.id++, this.srcStr, param.typeString, param.name, param.id);
+            this.register(ident);
+            args.push(ident);
         }
-
-        result = this.convertArrayType(str)
-        if(result != undefined) {
-            return result;
+        const fnId:number = this.id++; 
+        const contractIdent:Identifier = new Identifier(this.id++, this.srcStr, contractParam.typeString, contractParam.name, contractParam.id);
+        const callAccess:MemberAccess = new MemberAccess(this.id++, this.srcStr, call.vExpression.typeString, contractIdent, def.name, fnId);
+        const proxyCall:FunctionCall = new FunctionCall(this.id++, this.srcStr, call.typeString, call.kind, callAccess, args);
+        var proxyStmt:Statement;
+        if(rets.vParameters.length != 0) {
+            proxyStmt = new Return(this.id++, this.srcStr, rets.id, proxyCall);
         }
-
-        console.log("Unknown type string: " + str);
-        process.exit(1);
+        else {
+            proxyStmt = new ExpressionStatement(this.id++, this.srcStr, proxyCall);
+        }
+        const body:Block = new Block(this.id++, this.srcStr, [proxyStmt]);
+        const newDef:FunctionDefinition = new FunctionDefinition(fnId, this.srcStr, this.curContract.id, FunctionKind.Function, proxyName, false, FunctionVisibility.Internal, def.stateMutability, false, params, rets, [], undefined, body, undefined, undefined, undefined);
+        this.register(contractType, contractParam, params, contractIdent, callAccess, proxyCall, body, newDef, proxyStmt);
+        this.curContract.appendChild(newDef);
+        this.contractToProxies.get(this.curContract).set(proxyName, newDef);
+        return newDef;
     }
 
-
-    register(node:ASTNode) {
-        this.context.register(node);
+    redirectToProxy(callIdent:MemberAccess, proxyDef:FunctionDefinition, call:FunctionCall): FunctionCall {
+        const contractArg:Expression = this.clone(callIdent.vExpression) as Expression;
+        const callArgs:Expression[] = this.cloneList(call.vArguments) as Expression[];
+        var args:Expression[] = [contractArg].concat(callArgs);
+        const proxyIdent = new Identifier(this.id++, this.srcStr, call.vExpression.typeString, proxyDef.name, proxyDef.id);
+        const proxyCall:FunctionCall = new FunctionCall(this.id++, this.srcStr, call.typeString, call.kind, proxyIdent, args);
+        this.register(proxyIdent, proxyCall);
+        return proxyCall;
     }
 
-    declareParam(name:string, expr:Expression): Identifier {
-        let paramType:TypeName = this.convert(expr.typeString);
-        const decl:VariableDeclaration = new VariableDeclaration(this.id++, this.srcStr, false, false, name, this.curContract.id, false, DataLocation.Default, StateVariableVisibility.Default, Mutability.Mutable, paramType.typeString, undefined, paramType, undefined, undefined, undefined);
-        this.register(decl);
-        const ident:Identifier = new Identifier(this.id++, this.srcStr, paramType.typeString, name, decl.id);
-        this.register(ident);
-        return ident;
-    }
-
-    createDSLFn(fnName:string, mutability:FunctionStateMutability, args:Identifier[], expr:Expression) {
-        console.log(this.curContract.id);
-        console.log(this.dslDefs);
-        if(this.dslDefs.get(this.curContract.id).has(fnName)) {
-            return;
-        }
-        
-        let decls:VariableDeclaration[] = [];
-        for(const ident of args) {
-            const decl:VariableDeclaration = this.context.locate(ident.referencedDeclaration) as VariableDeclaration;
-            decls.push(decl);
-        }
-        const params:ParameterList = new ParameterList(this.id++, this.srcStr, decls);
-        this.register(params);
-
-        let paramType:TypeName = this.convert(expr.typeString);
-        const retDecl:VariableDeclaration = new VariableDeclaration(this.id++, this.srcStr, false, false, "", this.curContract.id, false, DataLocation.Default, StateVariableVisibility.Default, Mutability.Mutable, expr.typeString, undefined, paramType, undefined, undefined, undefined);
-        this.register(retDecl);
-        const ret:ParameterList = new ParameterList(this.id++, this.srcStr, [retDecl]);
-        this.register(ret);
-
-        const retStmt:Return = new Return(this.id++, this.srcStr, ret.id, expr);
-        this.register(retStmt);
-        const body:Block = new Block(this.id++, this.srcStr, [retStmt], undefined);
-        this.register(body);
-
-        const dslFn:FunctionDefinition = new FunctionDefinition(this.id++, this.srcStr, this.curContract.id, FunctionKind.Function, fnName, false, FunctionVisibility.Public, mutability, false, params, ret, [], undefined, body, undefined, undefined);
-        this.register(dslFn);
-        this.curContract.appendChild(dslFn);
-    }
-
-    //function involeDslFn(fnName:string, ) {
-    //}
-
-    fetchContractDeps(oldDef:ContractDefinition, newDef:ContractDefinition) {
-        super.fetchContractDeps(oldDef, newDef);
-        let preDefs:Set<string> = new Set<string>();
-        for(const baseId of oldDef.linearizedBaseContracts) {
-            const newId:number = this.getNewId(oldDef, baseId);
-            if(this.dslDefs.has(newId)) {
-                for(const def of this.dslDefs.get(newId)) {
-                    preDefs.add(def);
-                }
+    process_FunctionCall(node:FunctionCall): void {
+        const callIdent:Expression = node.vExpression;
+        if(callIdent instanceof MemberAccess && callIdent.referencedDeclaration) {
+            const oldDef:FunctionDefinition = node.context.locate(callIdent.referencedDeclaration) as FunctionDefinition;
+            if(this.info.fnParent.get(oldDef).kind != ContractKind.Library) {
+                const newDef:FunctionDefinition = this.makeFnProxy(callIdent, oldDef, node);
+                const proxyCall:FunctionCall = this.redirectToProxy(callIdent, newDef, node);
+                this.parent.appendChild(proxyCall);
+                return
             }
         }
-        this.dslDefs.set(newDef.id, preDefs);
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    process_BinaryOperation(node:BinaryOperation) {
-        const fnName:string = this.nameGen.gen_BinaryOperation(node);
-        const lhsType:string = node.vLeftExpression.typeString;
-        const rhsType:string = node.vRightExpression.typeString;
-
-        const ident1:Identifier = this.declareParam("a", node.vLeftExpression);
-        const ident2:Identifier = this.declareParam("b", node.vRightExpression);
-        const body:BinaryOperation = new BinaryOperation(this.id++, this.srcStr, node.typeString, node.operator, ident1, ident2);
-        this.register(body);
-        this.createDSLFn(fnName, FunctionStateMutability.Pure, [ident1, ident2], body);
-        super.process_BinaryOperation(node);
-    }*/
-}
-
-
-
-
-
-
-
-
-
-
-
-/*function gen_MemberAccess(node:MemberAccess) {
-}
-
-function gen_IndexAccess(node:IndexAccess) {
-    string baseType = sanitize(node.vBaseExpression.typeString);
-    string indType = sanitize(node.vIndexExpression.typeString);
-    string retType = sanitize(node.typeString);
-    string fnName = "v_ind_" + baseType + "_" + indType + "_" + retType;
-}
-
-function gen_IndexRangeAccess(node:IndexRangeAccess) {
-    string baseType = sanitize(node.vBaseExpression.typeString);
-    string startType = sanitize(node.vIndexExpression.typeString);
-    //string endType = sanitize(node.vIndexExpression.typeString);
-    string retType = sanitize(node.typeString);
-    string fnName = "v_rind_" + baseType + "_" + startType + "_" + retType;
-}
-
-function gen_NewExpression(node:NewExpression) {
-    string newType = sanatize(node.vTypeName.typeString);
-    string fnName = "v_create_" + newType;
-}
-
-function gen_Identifier(node:Identifier) {
-    fnName = "";
-    if(node.id == -1) {
-        switch(node.name) {
-            case "this":
-                fnName = "v_this";
-                break;
-            case "now":
-                fnName = "v_now";
-                break;
-        }
-    }
-    else {
+        super.process_FunctionCall(node);
     }
 }
 
-function getFnRef(expr:Expression):number {
-    if(expr instanceof Identifier) {
-        return (expr as Expression).referencedDeclaration;
-    }
-    else if(expr instanceof MemberAccess) {
-        return (expr as MemberAccess).referencedDeclaration;
-    }
-    else if(expr instanceof ElementaryTypeNameExpression) {
-    }
-    else if(expr instanceof NewExpression) {
-    }
-    else {
-        console.exit(1);
-    }
-}
 
-function gen_FunctionCall(node:FunctionCall) {
-}
 
-function gen_Conditional(node:Conditional) {
-    string exprType = sanitize(node.typeString);
-    string fnName = "v_tern_" + exprType;
-}*/
+
 
 
 

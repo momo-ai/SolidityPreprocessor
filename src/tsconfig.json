@@ -7,6 +7,7 @@
         "copy.ts",
         "traverse.ts",
         "dslGen.ts",
-        "summarize.ts"
+        "summarize.ts",
+        "info.ts"
     ]
 }

@@ -77,6 +77,10 @@ import {
     AstTraverse
 } from "./traverse";
 
+import {
+    ProjectInfo
+} from "./info"
+
 
 export class AstCopy extends AstTraverse<void> {
 
@@ -87,9 +91,11 @@ export class AstCopy extends AstTraverse<void> {
     parent: ASTNodeWithChildren<ASTNode>;
     refRedirect:Map<number, number>;
     curContract:ContractDefinition;
+    info:ProjectInfo;
 
     constructor() {
         super();
+        this.info = undefined;
         this.srcStr = "0:0:0";
         this.id = 1;
         this.modified = new SourceUnit(0, this.srcStr, "test.sol", 0, "test.sol", new Map());
@@ -128,11 +134,16 @@ export class AstCopy extends AstTraverse<void> {
     }
 
     addNode(oldNode:ASTNode, newNode: ASTNode) {
+
         this.registerNode(oldNode, newNode);
         this.parent.appendChild(newNode);
     }
 
     cloneList(nodes: ASTNode[]): ASTNode[] {
+        if(nodes == undefined) {
+            return undefined;
+        }
+
         const cloneParent:ASTNodeWithChildren<ASTNode> = new ASTNodeWithChildren<ASTNode>(this.id, this.srcStr);
         const oldParent:ASTNodeWithChildren<ASTNode> = this.parent;
         this.parent = cloneParent;
@@ -172,13 +183,19 @@ export class AstCopy extends AstTraverse<void> {
 
         if(!this.refRedirect.has(reqId)) {
             const oldParent:ASTNodeWithChildren<ASTNode> = this.parent;
-            this.parent = this.modified;
             const refNode:ASTNode = node.context.locate(reqId);
             if(refNode == undefined) {
                 console.log("Could not find referenced node: " + reqId);
                 console.log(node);
                 process.exit(1);
             } 
+
+            if(this.info.contractOwns.has(refNode)) {
+                this.parent = this.context.locate(this.getNewId(node, this.info.contractOwns.get(refNode).id)) as ContractDefinition;
+            }
+            else {
+                this.parent = this.modified;
+            }
             this.unitDispatch(refNode);
             this.parent = oldParent;
         }
@@ -356,7 +373,6 @@ export class AstCopy extends AstTraverse<void> {
     process_FunctionDefinition(node:FunctionDefinition): void {
         const newParams:ParameterList = this.clone(node.vParameters) as ParameterList;
         const newRets:ParameterList = this.clone(node.vReturnParameters) as ParameterList;
-        console.log(newRets);
         const newBody:Block = this.clone(node.vBody) as Block;
         const newOverride:OverrideSpecifier = this.clone(node.vOverrideSpecifier) as OverrideSpecifier;
         const mods:ModifierInvocation[] = this.cloneList(node.vModifiers) as ModifierInvocation[];
@@ -436,7 +452,17 @@ export class AstCopy extends AstTraverse<void> {
         const docs:string | StructuredDocumentation = this.cloneDocs(node.documentation);
         const newDecls:VariableDeclaration[] = this.cloneList(node.vDeclarations) as VariableDeclaration[];
         const newVal:Expression = this.clone(node.vInitialValue) as Expression;
-        const newStmt:VariableDeclarationStatement = new VariableDeclarationStatement(this.id++, this.srcStr, node.assignments, newDecls, newVal, docs);
+        var assign:Array<number | null> = []
+        for(const declId of node.assignments) {
+            if(declId == null) {
+                assign.push(null);
+            }
+            else {
+                assign.push(this.getNewId(node, declId));
+            }
+        }
+
+        const newStmt:VariableDeclarationStatement = new VariableDeclarationStatement(this.id++, this.srcStr, assign, newDecls, newVal, docs);
         this.addNode(node, newStmt)
     }
 
@@ -562,7 +588,6 @@ export class AstCopy extends AstTraverse<void> {
         const newExpr:Expression = this.clone(node.vExpression) as Expression;
         const newArgs:Expression[] = this.cloneList(node.vArguments) as Expression[];
         const newCall:FunctionCall = new FunctionCall(this.id++, this.srcStr, node.typeString, node.kind, newExpr, newArgs, node.fieldNames);
-        //console.log(newCall);
         this.addNode(node, newCall);
     }
 
@@ -610,6 +635,10 @@ export class AstCopy extends AstTraverse<void> {
 
     unitDispatch(node:ASTNode): void {
         if(this.refRedirect.has(node.id)) {
+            if(this.parent.children.find(n => n.id == this.refRedirect.get(node.id))) {
+                return;
+            }
+            this.parent.appendChild(this.context.locate(this.getNewId(node, node.id)));
             return;
         }
 
@@ -617,6 +646,8 @@ export class AstCopy extends AstTraverse<void> {
     }
 
     preprocess(units: SourceUnit[]):SourceUnit {
+        this.info = new ProjectInfo();
+        this.info.preprocess(units);
         for(const unit of units) {
             this.unitDispatch(unit);
         }

@@ -102,14 +102,15 @@ function writeAST(units: SourceUnit[], version: string): [string, Map<ASTNode, [
 
 async function test(filename: string) {
     const ast : SourceUnit[] = await readAST(filename);
-    const summarizer:Summarizer = new Summarizer();
-    summarizer.preprocess(ast);
-    /*const cpy:DSLGen = new DSLGen();
+    //const summarizer:Summarizer = new Summarizer();
+    //summarizer.preprocess(ast);
+    const cpy:DSLGen = new DSLGen();
+    //const cpy:AstCopy = new AstCopy();
     const modified:SourceUnit = cpy.preprocess(ast);
     if(modified != undefined) {
         var arr:SourceUnit[] = [modified];
         writeAST(arr, "0.8.0");
-    }*/
+    }
     //const result: CompileResult = await compile(filename);
     //const reader = new ASTReader();
     //const sourceUnits = reader.read(result.data);
