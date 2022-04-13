@@ -70,7 +70,8 @@ import {
         Mapping,
         ImportDirective,
         InheritanceSpecifier,
-        UsingForDirective
+        UsingForDirective,
+        getABIEncoderVersion
 } from "solc-typed-ast";
 
 import {
@@ -107,6 +108,7 @@ class Event extends SummaryNode {
 
 class Func extends SummaryNode {
     isConstructor:boolean;
+    selector:string;
     name:string;
     visibility:string;
     mutability:string;
@@ -349,8 +351,12 @@ export class Summarizer extends AstTraverse<SummaryNode> {
     process_FunctionDefinition(node:FunctionDefinition): SummaryNode {
         let func:Func = new Func();
         func.isConstructor = node.isConstructor;
-	func.visibility = node.visibility;
-	func.mutability = node.stateMutability;
+        let selector:string = node.canonicalSignatureHash(getABIEncoderVersion([], "0.8.0"));
+        if(selector) {
+            func.selector = "0x" + selector;
+        }
+        func.visibility = node.visibility;
+        func.mutability = node.stateMutability;
         if(node.isConstructor) {
             func.name = "constructor";
         }
