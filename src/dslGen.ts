@@ -281,14 +281,16 @@ export class DSLGen extends AstCopy {
         const id:number = this.getNewId(node, node.id);
         const decl:VariableDeclaration = this.context.locate(id) as VariableDeclaration;
         if(node.stateVariable && !node.constant) {
-            decl.mutability = Mutability.Mutable;
+            decl.mutability = node.mutability;
             const getter:FunctionDefinition = this.createGetter(decl);
             this.getters.set(decl.id, getter);
             this.parent.appendChild(getter);
-            const setter:FunctionDefinition = this.createSetter(decl);
-            this.setters.set(decl.id, setter);
-            this.setterToGetter.set(setter.id, getter.id);
-            this.parent.appendChild(setter);
+            if(node.mutability != Mutability.Immutable) {
+                const setter:FunctionDefinition = this.createSetter(decl);
+                this.setters.set(decl.id, setter);
+                this.setterToGetter.set(setter.id, getter.id);
+                this.parent.appendChild(setter);
+            }
         }
     }
 
@@ -298,12 +300,19 @@ export class DSLGen extends AstCopy {
         const ref = this.context.locate(refId);
         if(ref instanceof VariableDeclaration && ref.stateVariable && !ref.constant) {
             if(this.isSet) {
-                const ident:Identifier = new Identifier(this.id++, this.srcStr, node.typeString, this.setters.get(refId).name, this.setters.get(refId).id);
-                const call:FunctionCall = new FunctionCall(this.id++, this.srcStr, node.typeString, FunctionCallKind.FunctionCall, ident, []);
-                this.isSet = false;
-                this.register(ident);
-                super.addNode(node, call);
-                return;
+                if(ref.mutability == Mutability.Immutable) {
+                    this.isSet = false;
+                    super.process_Identifier(node);
+                    return;
+                }
+                else {
+                    const ident:Identifier = new Identifier(this.id++, this.srcStr, node.typeString, this.setters.get(refId).name, this.setters.get(refId).id);
+                    const call:FunctionCall = new FunctionCall(this.id++, this.srcStr, node.typeString, FunctionCallKind.FunctionCall, ident, []);
+                    this.isSet = false;
+                    this.register(ident);
+                    super.addNode(node, call);
+                    return;
+                }
             }
 
             const ident:Identifier = new Identifier(this.id++, this.srcStr, node.typeString, this.getters.get(refId).name, this.getters.get(refId).id);
