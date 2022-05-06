@@ -70,7 +70,8 @@ import {
         Mapping,
         ImportDirective,
         InheritanceSpecifier,
-        UsingForDirective
+        UsingForDirective,
+        InlineAssembly
 } from "solc-typed-ast";
 
 import {
@@ -632,6 +633,12 @@ export class AstCopy extends AstTraverse<void> {
         const newFnCallOp = new FunctionCallOptions(this.id++, this.srcStr, node.typeString, newExpr, newOptions);
         this.addNode(node, newFnCallOp);
     }
+
+    process_InlineAssembly(node:InlineAssembly): void { 
+        const newAssembly = new InlineAssembly(this.id++, this.srcStr, node.externalReferences, node.operations, node.yul, node.flags, node.evmVersion, undefined, undefined);
+        this.addNode(node, newAssembly); 
+    }
+
 
     unitDispatch(node:ASTNode): void {
         if(this.refRedirect.has(node.id)) {

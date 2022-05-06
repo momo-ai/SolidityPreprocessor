@@ -70,7 +70,8 @@ import {
         Mapping,
         ImportDirective,
         InheritanceSpecifier,
-        UsingForDirective
+        UsingForDirective,
+        InlineAssembly
 } from "solc-typed-ast";
 
 
@@ -172,6 +173,8 @@ export class AstTraverse<RetType> {
     process_TryCatchClause(node:TryCatchClause): RetType { return this.process_Default(node); }
 
     process_TryStatement(node:TryStatement): RetType { return this.process_Default(node); }
+
+    process_InlineAssembly(node:InlineAssembly): RetType { return this.process_Default(node); }
 
     /*
      * Expressions
@@ -391,6 +394,9 @@ export class AstTraverse<RetType> {
         }
         else if(node instanceof UsingForDirective) {
             return this.process_UsingForDirective(node);
+        }
+        else if(node instanceof InlineAssembly) {
+            return this.process_InlineAssembly(node);
         }
         else {
             console.log("Unknown type");
