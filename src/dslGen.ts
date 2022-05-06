@@ -436,7 +436,7 @@ export class DSLGen extends AstCopy {
         const callIdent:Expression = node.vExpression;
         if(callIdent instanceof MemberAccess && callIdent.referencedDeclaration) {
             const oldDef:FunctionDefinition = node.context.locate(callIdent.referencedDeclaration) as FunctionDefinition;
-            if(this.info.fnParent.get(oldDef).kind != ContractKind.Library) {
+            if(oldDef instanceof FunctionDefinition && this.info.fnParent.get(oldDef).kind != ContractKind.Library) {
                 const newDef:FunctionDefinition = this.makeFnProxy(callIdent, oldDef, node);
                 const proxyCall:FunctionCall = this.redirectToProxy(callIdent, newDef, node);
                 this.parent.appendChild(proxyCall);

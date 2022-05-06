@@ -600,7 +600,13 @@ export class AstCopy extends AstTraverse<void> {
     process_TupleExpression(node:TupleExpression): void {
         let newComps:Array<Expression | null> = new Array<Expression | null>();
         for(const component of node.vOriginalComponents) {
-            newComps.push(this.clone(component) as Expression | null);
+            const entry = this.clone(component) as Expression | null
+            if(entry) {
+                newComps.push(entry);
+            }
+            else {
+                newComps.push(null);
+            }
         }
 
         const newExpr:TupleExpression = new TupleExpression(this.id++, this.srcStr, node.typeString, node.isInlineArray, newComps);
