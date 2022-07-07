@@ -83,7 +83,7 @@ async function readAST(
 ): Promise<SourceUnit[]> {
     const reader = new ASTReader();
 
-    const result = await compileSol(fileName, "auto", [], undefined, undefined, undefined);
+    const result = await compileSol(fileName, "auto", { basePath: "./"}, undefined, undefined, undefined)
 
     return reader.read(result.data);
 }
