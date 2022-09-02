@@ -2,12 +2,12 @@
   "name": "soliditypreprocessor",
   "version": "1.0.0",
   "description": "Preprocesses and summarizes a solidity file",
-  "main": "src/preprocessor.js",
+  "main": "dist/preprocessor.js",
   "directories": {
-    "src": "src"
+    "src": "dist"
   },
   "scripts": {
-    "build": "cd src && tsc"
+    "build": "tsc"
   },
   "repository": {
     "type": "git",
@@ -16,5 +16,9 @@
   "dependencies": {
     "solc-typed-ast": "10.1.4"
   },
-  "author": "Veridise Inc."
+  "author": "Veridise Inc.",
+  "bin" : {
+    "soliditypreprocessor" : "dist/preprocessor.js",
+    "soliditysummarizer" : "dist/summarizer.js"
+  }
 }
