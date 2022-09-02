@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "downlevelIteration": true,
+        "module": "CommonJS", 
+        "sourceMap": true, 
+        "outDir": "./dist"
+
+    },
+    "files": [
+        "src/preprocessor.ts",
+        "src/summarizer.ts",
+        "src/copy.ts",
+        "src/traverse.ts",
+        "src/dslGen.ts",
+        "src/summarize.ts",
+        "src/info.ts"
+    ]
+}
